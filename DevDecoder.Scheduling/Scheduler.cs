@@ -8,7 +8,7 @@ using NodaTime;
 
 namespace DevDecoder.Scheduling;
 
-public partial class Scheduler : IScheduler
+public partial class Scheduler : IScheduler, IDisposable
 {
     /// <summary>
     ///     The minimum time the timer will wait for, otherwise uses a <see cref="SpinWait" />.
@@ -20,6 +20,9 @@ public partial class Scheduler : IScheduler
     /// </summary>
     private static readonly Duration s_maximumTimerWait = Duration.FromMilliseconds(0xfffffffe);
 
+    /// <summary>
+    ///     The logger.
+    /// </summary>
     private readonly ILogger<Scheduler>? _logger;
 
     /// <summary>
@@ -27,18 +30,24 @@ public partial class Scheduler : IScheduler
     /// </summary>
     private readonly ConcurrentDictionary<Guid, JobState> _scheduledJobs = new();
 
-    /// <summary>
-    ///     The background timer.
-    /// </summary>
-    private readonly Timer _ticker;
-
     private int _enabled;
 
     /// <summary>
+    ///     The master cancellation token source allows us to cancel all ongoing jobs on disposal.
+    /// </summary>
+    private CancellationTokenSource? _masterCancellationTokenSource = new();
+
+    /// <summary>
+    ///     The background timer.
+    /// </summary>
+    private Timer? _ticker;
+
+    /// <summary>
     ///     The tick state.
-    ///     0 = Inactive
-    ///     1 = Running
-    ///     2 =
+    ///     &lt;0 = Disposed
+    ///     0     = Inactive
+    ///     1     = Running
+    ///     >1    = Running, and more checks needed.
     /// </summary>
     private int _tickState;
 
@@ -120,6 +129,21 @@ public partial class Scheduler : IScheduler
     public Instant NextDue { get; private set; }
 
     /// <inheritdoc />
+    public void Dispose()
+    {
+        Interlocked.Exchange(ref _tickState, int.MinValue);
+        Interlocked.Exchange(ref _ticker, null)?.Dispose();
+        if (Interlocked.Exchange(ref _masterCancellationTokenSource, null) is not { } cts)
+        {
+            return;
+        }
+
+        // Cancel ongoing jobs.
+        cts.Cancel();
+        cts.Dispose();
+    }
+
+    /// <inheritdoc />
     public IPreciseClock Clock { get; }
 
     /// <inheritdoc />
@@ -149,15 +173,16 @@ public partial class Scheduler : IScheduler
     /// <summary>
     ///     The background thread that checks the schedule
     /// </summary>
-    /// <param name="state"></param>
-    private void CheckSchedule(object? state = null)
+    /// <param name="_"></param>
+    private void CheckSchedule(object? _ = null)
     {
         // Ensure ticker is stopped.
-        _ticker.Change(Timeout.Infinite, Timeout.Infinite);
+        _ticker?.Change(Timeout.Infinite, Timeout.Infinite);
 
         // Only allow one check to run at a time, namely the check that caused the tick state to move from 0 to 1.
         // The increment will force any currently executing check to recheck.
-        if (Interlocked.Increment(ref _tickState) > 1)
+        var tickerState = Interlocked.Increment(ref _tickState);
+        if (tickerState != 1)
         {
             return;
         }
@@ -176,11 +201,22 @@ public partial class Scheduler : IScheduler
 
                 // Set our tick state to 1, we're about to do a complete check of the actions if any other tick calls
                 // come in from this point onwards we will need to recheck.
-                Interlocked.Exchange(ref _tickState, 1);
+                tickerState = Interlocked.Exchange(ref _tickState, 1);
+                if (tickerState < 0)
+                {
+                    // We're disposed
+                    return;
+                }
 
                 var nextInstant = Instant.MaxValue;
                 foreach (var job in _scheduledJobs.Values.Where(j => j.IsEnabled && !j.IsExecuting))
                 {
+                    if (_tickState < 0)
+                    {
+                        // Disposed
+                        return;
+                    }
+
                     var due = job.Due;
                     if (due is null)
                     {
@@ -191,15 +227,23 @@ public partial class Scheduler : IScheduler
                     if (instant <= Clock.GetCurrentInstant())
                     {
                         var maximumExecutionDuration = MaximumExecutionDuration;
+                        var token = _masterCancellationTokenSource?.Token ?? default;
+                        if (token == default)
+                        {
+                            // Must have been disposed.
+                            return;
+                        }
+
                         if (maximumExecutionDuration == Duration.MaxValue ||
                             ((IScheduledJob)job).Schedule.Options.HasFlag(ScheduleOptions.LongRunning))
                         {
-                            job.ExecuteAsync(CancellationToken.None);
+                            job.ExecuteAsync(token);
                         }
                         else
                         {
                             var cts = new CancellationTokenSource(maximumExecutionDuration.ToTimeSpan());
-                            job.ExecuteAsync(cts.Token).ContinueWith(_ => cts.Dispose(), CancellationToken.None);
+                            var jts = CancellationTokenSource.CreateLinkedTokenSource(token, cts.Token);
+                            job.ExecuteAsync(jts.Token).ContinueWith(_ => cts.Dispose(), CancellationToken.None);
                         }
                     }
                     else if (instant < nextInstant)
@@ -261,18 +305,20 @@ public partial class Scheduler : IScheduler
             } while (true);
 
             // Set the ticker to run after the wait period.
-            _ticker.Change(
+            _ticker?.Change(
                 wait <= Duration.MaxValue ? (int)wait.TotalMilliseconds : Timeout.Infinite,
                 Timeout.Infinite);
 
             // Try to set the tick state back to 0, from 1 and finish
-            if (Interlocked.CompareExchange(ref _tickState, 0, 1) == 1)
+            tickerState = Interlocked.CompareExchange(ref _tickState, 0, 1);
+            if (tickerState < 2)
             {
+                // If the previous state was 1, or we're disposed we can return.
                 return;
             }
 
             // The tick state managed to increase from 1 before we could exit, so we need to clear the ticker and recheck.
-            _ticker.Change(Timeout.Infinite, Timeout.Infinite);
+            _ticker?.Change(Timeout.Infinite, Timeout.Infinite);
         } while (true);
     }
 }
