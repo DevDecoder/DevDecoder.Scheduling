@@ -17,11 +17,12 @@ public class CronSchedule : ISchedule
     ///     Creates a new <see cref="CronSchedule" />.
     /// </summary>
     /// <param name="expression">The cron expression, as a string.</param>
+    /// <param name="cronFormat">The cron format.</param>
     /// <param name="options">The options.</param>
     /// <param name="name">The optional name.</param>
-    public CronSchedule(string expression,
+    public CronSchedule(string expression, CronFormat cronFormat = CronFormat.Standard,
         ScheduleOptions options = ScheduleOptions.None, [CallerArgumentExpression("expression")] string name = "")
-        : this(CronExpression.Parse(expression), options, name)
+        : this(CronExpression.Parse(expression, cronFormat), options, name)
     {
     }
 

@@ -55,9 +55,9 @@ public partial class Scheduler : IScheduler
     /// <param name="dateTimeZoneProvider">The <see cref="IDateTimeZoneProvider">date/time zone provider</see>.</param>
     /// <param name="logger">The optional logger.</param>
     /// <exception cref="ArgumentOutOfRangeException"></exception>
-    public Scheduler(ClockPrecision precision, Duration? maximumExecutionDuration = null, IDateTimeZoneProvider? dateTimeZoneProvider = null,
+    public Scheduler(ClockPrecision precision, Duration? maximumExecutionDuration = null,
+        IDateTimeZoneProvider? dateTimeZoneProvider = null,
         ILogger<Scheduler>? logger = null) : this(
-        maximumExecutionDuration,
         precision switch
         {
             ClockPrecision.Fast => FastClock.Instance,
@@ -65,6 +65,7 @@ public partial class Scheduler : IScheduler
             ClockPrecision.Synchronized => SynchronizedClock.Instance,
             _ => throw new ArgumentOutOfRangeException(nameof(precision), precision, null)
         },
+        maximumExecutionDuration,
         dateTimeZoneProvider,
         logger)
     {
@@ -77,7 +78,8 @@ public partial class Scheduler : IScheduler
     /// <param name="clock"></param>
     /// <param name="dateTimeZoneProvider">The <see cref="IDateTimeZoneProvider">date/time zone provider</see>.</param>
     /// <param name="logger">The optional logger.</param>
-    public Scheduler(Duration? maximumExecutionDuration = null, IPreciseClock? clock = null, IDateTimeZoneProvider? dateTimeZoneProvider = null, ILogger<Scheduler>? logger = null)
+    public Scheduler(IPreciseClock? clock = null, Duration? maximumExecutionDuration = null,
+        IDateTimeZoneProvider? dateTimeZoneProvider = null, ILogger<Scheduler>? logger = null)
     {
         Clock = clock ?? StandardClock.Instance;
         DateTimeZoneProvider = dateTimeZoneProvider ?? DateTimeZoneProviders.Bcl;
@@ -122,7 +124,7 @@ public partial class Scheduler : IScheduler
 
     /// <inheritdoc />
     public IDateTimeZoneProvider DateTimeZoneProvider { get; }
-    
+
     /// <inheritdoc />
     public DateTimeZone DateTimeZone { get; set; }
 
