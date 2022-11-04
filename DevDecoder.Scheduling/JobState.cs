@@ -127,7 +127,7 @@ public partial class Scheduler
         }
 
         /// <summary>
-        ///     Calculate the next due <see cref="ZonedDateTime"/>.
+        ///     Calculate the next due <see cref="ZonedDateTime" />.
         /// </summary>
         private void CalculateNextDue()
         {
@@ -146,44 +146,12 @@ public partial class Scheduler
                 }
                 else
                 {
-                    var due = schedule.Next(Scheduler,
-                        Due is not null && scheduleOptions.HasFlag(ScheduleOptions.FromDue)
-                            ? Due.Value
-                            : Scheduler.GetCurrentZonedDateTime());
-
-                    if (due is not null && scheduleOptions > ScheduleOptions.FromDue)
-                    {
-                        // Round up due time.
-                        var instant = due.Value.ToInstant();
-                        if (scheduleOptions.HasFlag(ScheduleOptions.AlignDays))
-                        {
-                            instant = Instant.FromUnixTimeTicks(
-                                (instant.ToUnixTimeTicks() + NodaConstants.TicksPerDay - 1) / NodaConstants.TicksPerDay *
-                                NodaConstants.TicksPerDay);
-                        }
-                        else if (scheduleOptions.HasFlag(ScheduleOptions.AlignHours))
-                        {
-                            instant = Instant.FromUnixTimeTicks(
-                                (instant.ToUnixTimeTicks() + NodaConstants.TicksPerHour - 1) / NodaConstants.TicksPerHour *
-                                NodaConstants.TicksPerHour);
-                        }
-                        else if (scheduleOptions.HasFlag(ScheduleOptions.AlignMinutes))
-                        {
-                            instant = Instant.FromUnixTimeTicks(
-                                (instant.ToUnixTimeTicks() + NodaConstants.TicksPerMinute - 1) /
-                                NodaConstants.TicksPerMinute *
-                                NodaConstants.TicksPerMinute);
-                        }
-                        else if (scheduleOptions.HasFlag(ScheduleOptions.AlignSeconds))
-                        {
-                            instant = Instant.FromUnixTimeTicks(
-                                (instant.ToUnixTimeTicks() + NodaConstants.TicksPerSecond - 1) /
-                                NodaConstants.TicksPerSecond *
-                                NodaConstants.TicksPerHour);
-                        }
-
-                        due = instant.InZone(due.Value.Zone);
-                    }
+                    var due = schedule
+                        .Next(Scheduler,
+                            Due is not null && scheduleOptions.HasFlag(ScheduleOptions.FromDue)
+                                ? Due.Value
+                                : Scheduler.GetCurrentZonedDateTime())
+                        .ApplyOptions(scheduleOptions);
 
                     if (Due == due)
                     {

@@ -4,7 +4,6 @@
 using System.Runtime.CompilerServices;
 using Cronos;
 using NodaTime;
-using NodaTime.TimeZones;
 
 namespace DevDecoder.Scheduling.Schedules;
 
@@ -41,7 +40,7 @@ public class CronSchedule : ISchedule
     }
 
     /// <summary>
-    /// The parsed <see cref="CronExpression"/>.
+    ///     The parsed <see cref="CronExpression" />.
     /// </summary>
     public CronExpression Expression { get; }
 
@@ -55,8 +54,13 @@ public class CronSchedule : ISchedule
     public ZonedDateTime? Next(IScheduler scheduler, ZonedDateTime last)
     {
         // TODO shame we can't do this in NodaTime (see https://github.com/HangfireIO/Cronos/issues/55)
-        var next = Expression.GetNextOccurrence(last.ToDateTimeUtc(), TimeZoneInfo.FindSystemTimeZoneById(last.Zone.Id));
-        if (next is null) return null;
+        var next = Expression.GetNextOccurrence(last.ToDateTimeUtc(),
+            TimeZoneInfo.FindSystemTimeZoneById(last.Zone.Id));
+        if (next is null)
+        {
+            return null;
+        }
+
         var instant = Instant.FromDateTimeUtc(next.Value);
         return new ZonedDateTime(instant, last.Zone);
     }

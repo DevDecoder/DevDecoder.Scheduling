@@ -182,7 +182,10 @@ public partial class Scheduler : IScheduler
                 foreach (var job in _scheduledJobs.Values.Where(j => j.IsEnabled && !j.IsExecuting))
                 {
                     var due = job.Due;
-                    if (due is null) continue;
+                    if (due is null)
+                    {
+                        continue;
+                    }
 
                     var instant = due.Value.ToInstant();
                     if (instant <= Clock.GetCurrentInstant())

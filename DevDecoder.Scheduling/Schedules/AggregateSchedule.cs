@@ -103,13 +103,17 @@ public class AggregateSchedule : ISchedule, IEnumerable<ISchedule>
         foreach (var schedule in _schedules)
         {
             var scheduleNext = schedule.Next(scheduler, last);
-            if (scheduleNext is null) continue;
+            if (scheduleNext is null)
+            {
+                continue;
+            }
 
             // If we were scheduled in the past return immediately.
             if (ZonedDateTime.Comparer.Instant.Compare(scheduleNext.Value, last) <= 0)
             {
                 return last;
             }
+
             if (next is null || ZonedDateTime.Comparer.Instant.Compare(scheduleNext.Value, next.Value) < 0)
             {
                 next = scheduleNext;

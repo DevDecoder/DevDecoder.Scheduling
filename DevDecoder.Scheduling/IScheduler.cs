@@ -1,8 +1,6 @@
 ﻿// Licensed under the Apache License, Version 2.0 (the "License").
 // See the LICENSE file in the project root for more information.
 
-using System.Runtime.CompilerServices;
-using DevDecoder.Scheduling.Jobs;
 using NodaTime;
 
 namespace DevDecoder.Scheduling;
@@ -23,7 +21,7 @@ public interface IScheduler
     IDateTimeZoneProvider DateTimeZoneProvider { get; }
 
     /// <summary>
-    /// The current date/time zone.
+    ///     The current date/time zone.
     /// </summary>
     DateTimeZone DateTimeZone { get; set; }
 
@@ -33,7 +31,7 @@ public interface IScheduler
     Duration MaximumExecutionDuration { get; set; }
 
     /// <summary>
-    /// Get's the current <see cref="ZonedDateTime"/>.
+    ///     Get's the current <see cref="ZonedDateTime" />.
     /// </summary>
     ZonedDateTime GetCurrentZonedDateTime() => Clock.GetCurrentInstant().InZone(DateTimeZone);
 
@@ -52,5 +50,4 @@ public interface IScheduler
     ///     <see cref="IJob">job</see>.
     /// </returns>
     IScheduledJob Add(IJob job, ISchedule schedule);
-
 }

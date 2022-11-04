@@ -7,7 +7,8 @@ using NodaTime;
 namespace DevDecoder.Scheduling.Schedules;
 
 /// <summary>
-///     Implements a <see cref="ISchedule">schedule</see> which executes once, at the specified <see cref="ZonedDateTime" />.
+///     Implements a <see cref="ISchedule">schedule</see> which executes once, at the specified
+///     <see cref="ZonedDateTime" />.
 /// </summary>
 public class OneOffSchedule : ISchedule
 {

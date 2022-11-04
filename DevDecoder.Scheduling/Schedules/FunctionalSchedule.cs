@@ -7,8 +7,8 @@ using NodaTime;
 namespace DevDecoder.Scheduling.Schedules;
 
 /// <summary>
-///     Implements a <see cref="ISchedule">schedule</see> where the next execution's date and time is determined by the supplied
-///     function.
+///     Implements a <see cref="ISchedule">schedule</see> where the next execution's date and time is determined by the
+///     supplied function.
 /// </summary>
 public class FunctionalSchedule : ISchedule
 {
