@@ -1,0 +1,51 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <PackageId>DevDecoder.Scheduling</PackageId>
+    <Authors>Craig Dean</Authors>
+    <Company>DevDecoder</Company>
+    <PackageDescription>Cross-platform .NET Standard library providing simple scheduling of tasks.</PackageDescription>
+    <RepositoryUrl>https://github.com/DevDecoder/DevDecoder.Scheduling</RepositoryUrl>
+    <Description>Cross-platform .NET Standard library providing simple scheduling of tasks.</Description>
+    <Copyright>2023 Craig Dean</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/DevDecoder/DevDecoder.Scheduling</PackageProjectUrl>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>Scheduling, .NET, Cross-platform, Scheduler, CRON, NodaTime</PackageTags>
+    <PackageIcon>DevDecoder Icon.png</PackageIcon>
+    <PackageReleaseNotes>Stable release.</PackageReleaseNotes>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <SignAssembly>true</SignAssembly>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <AssemblyName>DevDecoder.Scheduling</AssemblyName>
+    <RootNamespace>DevDecoder.Scheduling</RootNamespace>
+    <PackageReadmeFile>readme.md</PackageReadmeFile>
+    <Configurations>Debug;Release</Configurations>
+    <AssemblyOriginatorKeyFile>D:\Source\DevDecoder.Scheduling\DevDecoder.Scheduling.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Cronos" Version="0.7.1" />
+    <PackageReference Include="NodaTime" Version="3.1.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="6.0.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\DevDecoder Icon.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\readme.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+  
+</Project>
