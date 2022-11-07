@@ -63,7 +63,7 @@ public partial class Scheduler
                     return;
                 }
 
-                CalculateNextDue();
+                CalculateNextDue(true);
                 _scheduler.CheckSchedule($"Job '{Name}' being enabled.");
             }
         }
@@ -72,7 +72,7 @@ public partial class Scheduler
         public string Name => _job.Name;
 
         /// <inheritdoc cref="IScheduledJob.Due" />
-        public ZonedDateTime? Due => _due;
+        public ZonedDateTime? Due => _scheduler.IsEnabled ? _due : null;
 
         /// <inheritdoc cref="IScheduledJob.Schedule" />
         ISchedule IScheduledJob.Schedule => _schedule;
@@ -169,7 +169,7 @@ public partial class Scheduler
         /// <summary>
         ///     Calculate the next due <see cref="ZonedDateTime" />.
         /// </summary>
-        public void CalculateNextDue()
+        public void CalculateNextDue(bool force = false)
         {
             var schedule = _schedule;
             var scheduleOptions = schedule.Options;
@@ -188,7 +188,7 @@ public partial class Scheduler
                 {
                     var due = schedule
                         .Next(Scheduler,
-                            _due is not null && scheduleOptions.HasFlag(ScheduleOptions.FromDue)
+                            !force && _due is not null && scheduleOptions.HasFlag(ScheduleOptions.FromDue)
                                 ? _due.Value
                                 : Scheduler.GetCurrentZonedDateTime())
                         .ApplyOptions(scheduleOptions);

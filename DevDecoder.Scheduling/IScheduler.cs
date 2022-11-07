@@ -36,6 +36,11 @@ public interface IScheduler
     ZonedDateTime GetCurrentZonedDateTime() => Clock.GetCurrentInstant().InZone(DateTimeZone);
 
     /// <summary>
+    ///     If <c>true</c> then the scheduler is allowed to execute jobs; otherwise <c>false</c>, prevents further executions.
+    /// </summary>
+    bool IsEnabled { get; set; }
+
+    /// <summary>
     ///     Tries to remove the specified <see cref="IScheduledJob">scheduled job</see>
     /// </summary>
     bool TryRemove(IScheduledJob job);

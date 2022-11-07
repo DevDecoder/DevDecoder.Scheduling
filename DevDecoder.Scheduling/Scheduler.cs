@@ -96,7 +96,7 @@ public partial class Scheduler : IScheduler, IDisposable
         DateTimeZoneProvider = dateTimeZoneProvider ?? DateTimeZoneProviders.Bcl;
         DateTimeZone = DateTimeZoneProvider.GetSystemDefault();
         _logger = logger;
-        _ticker = new Timer(CheckSchedule, "By timer tick.", Timeout.Infinite, Timeout.Infinite);
+        _ticker = new Timer(TimerTick, null, Timeout.Infinite, Timeout.Infinite);
         MaximumExecutionDuration = maximumExecutionDuration ?? Duration.MaxValue;
     }
 
@@ -121,7 +121,7 @@ public partial class Scheduler : IScheduler, IDisposable
             }
 
             // We have been enabled, recheck schedule.
-            CheckSchedule("On scheduler being enabled.");
+            CheckSchedule("On scheduler being enabled.", true);
         }
     }
 
@@ -143,6 +143,7 @@ public partial class Scheduler : IScheduler, IDisposable
         // Cancel ongoing jobs.
         cts.Cancel();
         cts.Dispose();
+        _logger?.LogInformation("The scheduler was disposed.");
     }
 
     /// <inheritdoc />
@@ -167,7 +168,7 @@ public partial class Scheduler : IScheduler, IDisposable
         _scheduledJobs.TryAdd(jobState.Id, jobState);
 
         // We have to calculate the first due date, but we need to have added it to the scheduled jobs before we do.
-        jobState.CalculateNextDue();
+        jobState.CalculateNextDue(true);
 
         // Check the schedule as our Due date has changed.
         CheckSchedule("Job added.");
@@ -179,12 +180,19 @@ public partial class Scheduler : IScheduler, IDisposable
         => _scheduledJobs.TryRemove(job.Id, out _);
 
     /// <summary>
+    /// Called whenever the timer ticks.
+    /// </summary>
+    /// <param name="_"></param>
+    private void TimerTick(object? _) => CheckSchedule("By timer tick");
+
+    /// <summary>
     ///     The background thread that checks the schedule
     /// </summary>
-    /// <param name="state">The reason for the check.</param>
-    private void CheckSchedule(object? state = null)
+    /// <param name="reason">The reason for the check.</param>
+    /// <param name="forceDue">Forces recalculation of due time on jobs.</param>
+    private void CheckSchedule(string reason, bool forceDue = false)
     {
-        var reason = $"#{Interlocked.Increment(ref _checkCount)} {state}";
+        reason = $"#{Interlocked.Increment(ref _checkCount)} {reason}";
 
         _logger?.LogTrace("Scheduler check requested: {reason}", reason);
         // Ensure ticker is stopped.
@@ -229,6 +237,12 @@ public partial class Scheduler : IScheduler, IDisposable
                         _logger?.LogTrace("Scheduler check terminated as disposed: {reason}", reason);
                         // Disposed
                         return;
+                    }
+
+                    if (forceDue)
+                    {
+                        // We've been re-enabled so recalculate due.
+                        job.CalculateNextDue(true);
                     }
 
                     var due = job.Due;
