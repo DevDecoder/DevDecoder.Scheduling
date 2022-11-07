@@ -18,7 +18,7 @@ public interface IScheduledJob
     /// <summary>
     ///     An optional job name.
     /// </summary>
-    public string Name { get; }
+    string Name { get; }
 
     /// <summary>
     ///     The <see cref="IScheduler">scheduler</see> executing this job.
@@ -33,8 +33,8 @@ public interface IScheduledJob
     /// <summary>
     ///     The <see cref="Instant">instant</see> the job was due to run.
     /// </summary>
-    /// <remarks>This will be when the job was requested, if the job is executed manually; otherwise <c>null</c>.</remarks>
-    public ZonedDateTime? Due { get; }
+    /// <remarks>This will be when the job is next due; otherwise <c>null</c>, if the job is no longer due.</remarks>
+    ZonedDateTime? Due { get; }
 
     /// <summary>
     ///     If <c>true</c> then the job is currently executing; otherwise <c>false</c>.
@@ -52,5 +52,10 @@ public interface IScheduledJob
     /// </summary>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>An awaitable task.</returns>
+    /// <remarks>
+    ///     A job will never be executed _concurrently_ with itself.  If a job is executed manually, whilst it is also
+    ///     executing as part of a schedule, the manual execution will receive the same task, and vice-versa.  It is
+    ///     effectively 'de-bounced', meaning that a job execution is inherently thread-safe.
+    /// </remarks>
     Task ExecuteAsync(CancellationToken cancellationToken = default);
 }

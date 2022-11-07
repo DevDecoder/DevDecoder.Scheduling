@@ -13,12 +13,17 @@ namespace DevDecoder.Scheduling.Schedules;
 public class OneOffSchedule : ISchedule
 {
     /// <summary>
+    ///     A schedule that never runs.
+    /// </summary>
+    public static readonly OneOffSchedule Never = new(null);
+
+    /// <summary>
     ///     Creates a new <see cref="OneOffSchedule" />.
     /// </summary>
     /// <param name="zonedDateTime">The zoned date and time to execute.</param>
     /// <param name="options">The options.</param>
     /// <param name="name">The optional name.</param>
-    public OneOffSchedule(ZonedDateTime zonedDateTime,
+    public OneOffSchedule(ZonedDateTime? zonedDateTime,
         ScheduleOptions options = ScheduleOptions.None, [CallerArgumentExpression("zonedDateTime")] string name = "")
     {
         ZonedDateTime = zonedDateTime;

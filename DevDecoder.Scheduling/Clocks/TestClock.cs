@@ -10,6 +10,11 @@ namespace DevDecoder.Scheduling.Clocks;
 /// </summary>
 public class TestClock : IPreciseClock
 {
+    /// <summary>
+    ///     A clock that never runs as it always returns the latest possible date/time.
+    /// </summary>
+    public static readonly TestClock Never = new(_ => Instant.MaxValue);
+
     private readonly Func<Instant, Instant> _nextInstantFunc;
     private Instant _lastInstant;
 
@@ -24,9 +29,18 @@ public class TestClock : IPreciseClock
     {
         _nextInstantFunc = nextInstantFunc;
         Precision = precision;
-        firstInstant ??= GetInstant(precision);
+        firstInstant ??= precision.GetInstant();
         _lastInstant = firstInstant.Value;
     }
+
+    /// <summary>
+    ///     The instance of the clock.
+    /// </summary>
+    /// <remarks>
+    ///     This is an alias of <see cref="Never" />, for compatibility with the standard provided by the other
+    ///     <see cref="IPreciseClock">clock implementations</see>.
+    /// </remarks>
+    public static TestClock Instance => Never;
 
     /// <inheritdoc />
     public Instant GetCurrentInstant() => _lastInstant = _nextInstantFunc(_lastInstant);
@@ -40,7 +54,7 @@ public class TestClock : IPreciseClock
     /// </summary>
     /// <param name="precision">The optional clock precision, defaults to <see cref="Precision" />.</param>
     /// <returns></returns>
-    public Instant GetActualCurrentInstant(ClockPrecision? precision = null) => GetInstant(precision ?? Precision);
+    public Instant GetActualCurrentInstant(ClockPrecision? precision = null) => (precision ?? Precision).GetInstant();
 
     /// <summary>
     ///     Creates a <see cref="TestClock" /> that always returns <paramref name="fixedInstant" />.
@@ -62,21 +76,9 @@ public class TestClock : IPreciseClock
     public static TestClock From(Instant? firstInstant = null, Duration? interval = null,
         ClockPrecision precision = ClockPrecision.Standard)
     {
-        firstInstant ??= GetInstant(precision);
+        firstInstant ??= precision.GetInstant();
         interval ??= Duration.FromSeconds(1);
         var d = interval.Value;
         return new TestClock(i => i + d, precision, firstInstant.Value - d);
     }
-
-    /// <summary>
-    ///     Gets the actual current instant, based on the <paramref name="precision" /> specified.
-    /// </summary>
-    /// <param name="precision">The precision</param>
-    /// <returns>The actual </returns>
-    private static Instant GetInstant(ClockPrecision precision) => precision switch
-    {
-        ClockPrecision.Fast => FastClock.Instance.GetCurrentInstant(),
-        ClockPrecision.Synchronized => SynchronizedClock.Instance.GetCurrentInstant(),
-        _ => StandardClock.Instance.GetCurrentInstant()
-    };
 }

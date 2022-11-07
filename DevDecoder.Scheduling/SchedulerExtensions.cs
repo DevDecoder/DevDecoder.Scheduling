@@ -2,6 +2,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Runtime.CompilerServices;
+using DevDecoder.Scheduling.Clocks;
 using DevDecoder.Scheduling.Jobs;
 using NodaTime;
 
@@ -16,6 +17,27 @@ public static class SchedulerExtensions
     private static readonly Duration s_oneMinute = Duration.FromMinutes(1);
     private static readonly Duration s_oneHour = Duration.FromHours(1);
     private static readonly Duration s_oneDay = Duration.FromDays(1);
+
+    /// <summary>
+    ///     Get's a clock that best matches the requested precision.
+    /// </summary>
+    /// <param name="precision">The precision.</param>
+    /// <returns>A <see cref="IPreciseClock" />.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static IPreciseClock GetClock(this ClockPrecision precision) => precision switch
+    {
+        ClockPrecision.Fast => FastClock.Instance,
+        ClockPrecision.Synchronized => SynchronizedClock.Instance,
+        _ => StandardClock.Instance
+    };
+
+    /// <summary>
+    ///     Gets the current instant, based on the <paramref name="precision" /> specified.
+    /// </summary>
+    /// <param name="precision">The precision</param>
+    /// <returns>The current instant.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Instant GetInstant(this ClockPrecision precision) => precision.GetClock().GetCurrentInstant();
 
     /// <summary>
     ///     Rounds the <paramref name="localDateTime" /> up based on the <paramref name="duration" />.

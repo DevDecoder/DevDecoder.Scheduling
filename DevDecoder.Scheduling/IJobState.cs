@@ -17,21 +17,26 @@ public interface IJobState
     Guid Id { get; }
 
     /// <summary>
+    ///     An optional job name.
+    /// </summary>
+    string Name { get; }
+
+    /// <summary>
     ///     The <see cref="IScheduler">scheduler</see> executing this job.
     /// </summary>
-    public IScheduler Scheduler { get; }
+    IScheduler Scheduler { get; }
 
     /// <summary>
     ///     The <see cref="ISchedule">schedule</see> that triggered this execution.
     /// </summary>
     /// <remarks>Will be <c>null</c> if the job was <see cref="IsManual">executed manually</see>.</remarks>
-    public ISchedule? Schedule { get; }
+    ISchedule? Schedule { get; }
 
     /// <summary>
     ///     The <see cref="Instant">instant</see> the job was due to run.
     /// </summary>
-    /// <remarks>This will be when the job was requested, if the job is executed manually; otherwise <c>null</c>.</remarks>
-    public ZonedDateTime? Due { get; }
+    /// <remarks>This will be when the job was requested.</remarks>
+    ZonedDateTime Due { get; }
 
     /// <summary>
     ///     The current logger, if any; otherwise <c>null</c>.

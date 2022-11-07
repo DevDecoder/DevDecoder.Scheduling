@@ -13,7 +13,7 @@ public delegate Task ExecuteDelegate(IJobState state, CancellationToken cancella
 /// </summary>
 public sealed class SimpleJob : IJob
 {
-    private const string ResultLog = "The {JobName} job returned: {Result}";
+    private const string ResultLog = "The '{JobName}' job returned: {Result}";
     private readonly ExecuteDelegate _delegate;
 
     /// <summary>

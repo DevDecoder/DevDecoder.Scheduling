@@ -26,7 +26,8 @@ public interface ISchedule
     /// <param name="scheduler">The scheduler requesting the next date/time.</param>
     /// <param name="last">
     ///     The last <see cref="ZonedDateTime" /> the job was completed, or started
-    ///     (see <see cref="Options" />), if any; otherwise it is the current date and time.
+    ///     (see <see cref="Options" />), if any; otherwise it is the date and time the job was last
+    ///     added or enabled.
     /// </param>
     /// <returns>The next <see cref="ZonedDateTime" /> in the schedule, or <c>null</c> for stopped.</returns>
     ZonedDateTime? Next(IScheduler scheduler, ZonedDateTime last);

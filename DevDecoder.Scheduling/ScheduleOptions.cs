@@ -17,9 +17,14 @@ public enum ScheduleOptions : byte
     None = 0,
 
     /// <summary>
+    ///     If set, will not be passed a timer based cancellation token.
+    /// </summary>
+    LongRunning = 1 << 1,
+
+    /// <summary>
     ///     If set, then any errors thrown by the <see cref="IJob" /> will not cause the job to be disabled.
     /// </summary>
-    IgnoreErrors = 1 << 1,
+    IgnoreErrors = 1 << 2,
 
     /// <summary>
     ///     If set, the value passed into <see cref="ISchedule.Next" /> marks when the previous execution was due;
@@ -29,30 +34,25 @@ public enum ScheduleOptions : byte
     ///     In the event there has been no previous scheduled execution then this will be
     ///     <see cref="IClock.GetCurrentInstant()" />.
     /// </remarks>
-    FromDue = 1 << 2,
+    FromDue = 1 << 3,
 
     /// <summary>
     ///     Aligns any next due date to the next second.
     /// </summary>
-    AlignSeconds = 1 << 3,
+    AlignSeconds = 1 << 4,
 
     /// <summary>
     ///     Aligns any next due date to the next minute.
     /// </summary>
-    AlignMinutes = 1 << 4,
+    AlignMinutes = 1 << 5,
 
     /// <summary>
     ///     Aligns any next due date to the next hour.
     /// </summary>
-    AlignHours = 1 << 5,
+    AlignHours = 1 << 6,
 
     /// <summary>
     ///     Aligns any next due date to the next day.
     /// </summary>
-    AlignDays = 1 << 6,
-
-    /// <summary>
-    ///     If set, will not be passed a timer based cancellation token.
-    /// </summary>
-    LongRunning
+    AlignDays = 1 << 7
 }

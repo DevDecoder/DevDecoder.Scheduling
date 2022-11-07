@@ -30,7 +30,15 @@ public partial class Scheduler : IScheduler, IDisposable
     /// </summary>
     private readonly ConcurrentDictionary<Guid, JobState> _scheduledJobs = new();
 
-    private int _enabled;
+    /// <summary>
+    ///     The check execution counter.
+    /// </summary>
+    private long _checkCount;
+
+    /// <summary>
+    ///     Whether we are enabled, initialize as enabled.
+    /// </summary>
+    private int _enabled = 1;
 
     /// <summary>
     ///     The master cancellation token source allows us to cancel all ongoing jobs on disposal.
@@ -67,13 +75,7 @@ public partial class Scheduler : IScheduler, IDisposable
     public Scheduler(ClockPrecision precision, Duration? maximumExecutionDuration = null,
         IDateTimeZoneProvider? dateTimeZoneProvider = null,
         ILogger<Scheduler>? logger = null) : this(
-        precision switch
-        {
-            ClockPrecision.Fast => FastClock.Instance,
-            ClockPrecision.Standard => StandardClock.Instance,
-            ClockPrecision.Synchronized => SynchronizedClock.Instance,
-            _ => throw new ArgumentOutOfRangeException(nameof(precision), precision, null)
-        },
+        precision.GetClock(),
         maximumExecutionDuration,
         dateTimeZoneProvider,
         logger)
@@ -94,7 +96,7 @@ public partial class Scheduler : IScheduler, IDisposable
         DateTimeZoneProvider = dateTimeZoneProvider ?? DateTimeZoneProviders.Bcl;
         DateTimeZone = DateTimeZoneProvider.GetSystemDefault();
         _logger = logger;
-        _ticker = new Timer(CheckSchedule, null, Timeout.Infinite, Timeout.Infinite);
+        _ticker = new Timer(CheckSchedule, "By timer tick.", Timeout.Infinite, Timeout.Infinite);
         MaximumExecutionDuration = maximumExecutionDuration ?? Duration.MaxValue;
     }
 
@@ -119,7 +121,7 @@ public partial class Scheduler : IScheduler, IDisposable
             }
 
             // We have been enabled, recheck schedule.
-            CheckSchedule();
+            CheckSchedule("On scheduler being enabled.");
         }
     }
 
@@ -163,6 +165,12 @@ public partial class Scheduler : IScheduler, IDisposable
     {
         var jobState = new JobState(job, this, schedule, _logger);
         _scheduledJobs.TryAdd(jobState.Id, jobState);
+
+        // We have to calculate the first due date, but we need to have added it to the scheduled jobs before we do.
+        jobState.CalculateNextDue();
+
+        // Check the schedule as our Due date has changed.
+        CheckSchedule("Job added.");
         return jobState;
     }
 
@@ -173,9 +181,12 @@ public partial class Scheduler : IScheduler, IDisposable
     /// <summary>
     ///     The background thread that checks the schedule
     /// </summary>
-    /// <param name="_"></param>
-    private void CheckSchedule(object? _ = null)
+    /// <param name="state">The reason for the check.</param>
+    private void CheckSchedule(object? state = null)
     {
+        var reason = $"#{Interlocked.Increment(ref _checkCount)} {state}";
+
+        _logger?.LogTrace("Scheduler check requested: {reason}", reason);
         // Ensure ticker is stopped.
         _ticker?.Change(Timeout.Infinite, Timeout.Infinite);
 
@@ -195,6 +206,7 @@ public partial class Scheduler : IScheduler, IDisposable
                 // Check if we're disabled.
                 if (_enabled < 1)
                 {
+                    _logger?.LogTrace("Scheduler check terminated as no longer enabled: {reason}", reason);
                     Interlocked.Exchange(ref _tickState, 0);
                     return;
                 }
@@ -204,6 +216,7 @@ public partial class Scheduler : IScheduler, IDisposable
                 tickerState = Interlocked.Exchange(ref _tickState, 1);
                 if (tickerState < 0)
                 {
+                    _logger?.LogTrace("Scheduler check terminated as disposed: {reason}", reason);
                     // We're disposed
                     return;
                 }
@@ -213,6 +226,7 @@ public partial class Scheduler : IScheduler, IDisposable
                 {
                     if (_tickState < 0)
                     {
+                        _logger?.LogTrace("Scheduler check terminated as disposed: {reason}", reason);
                         // Disposed
                         return;
                     }
@@ -230,6 +244,7 @@ public partial class Scheduler : IScheduler, IDisposable
                         var token = _masterCancellationTokenSource?.Token ?? default;
                         if (token == default)
                         {
+                            _logger?.LogTrace("Scheduler check terminated as disposed: {reason}", reason);
                             // Must have been disposed.
                             return;
                         }
@@ -255,6 +270,8 @@ public partial class Scheduler : IScheduler, IDisposable
                 // If the tick state has increased, check again.
                 if (_tickState > 1)
                 {
+                    _logger?.LogTrace("Scheduler check repeating due to more requests being received: {reason}",
+                        reason);
                     // Yield to allow the current actions some chance to run.
                     Thread.Yield();
                     continue;
@@ -301,24 +318,40 @@ public partial class Scheduler : IScheduler, IDisposable
                 }
 
                 // We're due in the past so try again.
+                _logger?.LogTrace("Scheduler check repeating due to pending job: {reason}", reason);
                 Thread.Yield();
             } while (true);
 
             // Set the ticker to run after the wait period.
-            _ticker?.Change(
-                wait <= Duration.MaxValue ? (int)wait.TotalMilliseconds : Timeout.Infinite,
-                Timeout.Infinite);
+            if (wait < Duration.MaxValue)
+            {
+                var ms = (int)wait.TotalMilliseconds;
+                _logger?.LogTrace("Scheduler waiting for {wait}ms.", ms);
+                _ticker?.Change(ms, Timeout.Infinite);
+            }
+            else
+            {
+                _ticker?.Change(Timeout.Infinite, Timeout.Infinite);
+            }
 
             // Try to set the tick state back to 0, from 1 and finish
             tickerState = Interlocked.CompareExchange(ref _tickState, 0, 1);
+            if (tickerState < 0)
+            {
+                _logger?.LogTrace("Scheduler check terminated as disposed: {reason}", reason);
+                return;
+            }
+
             if (tickerState < 2)
             {
-                // If the previous state was 1, or we're disposed we can return.
+                _logger?.LogTrace("Scheduler check ending as no more pending jobs: {reason}", reason);
                 return;
             }
 
             // The tick state managed to increase from 1 before we could exit, so we need to clear the ticker and recheck.
             _ticker?.Change(Timeout.Infinite, Timeout.Infinite);
+
+            _logger?.LogTrace("Scheduler check repeating due to more requests being received: {reason}", reason);
         } while (true);
     }
 }

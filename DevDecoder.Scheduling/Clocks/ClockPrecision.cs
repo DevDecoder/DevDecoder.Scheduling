@@ -12,8 +12,7 @@ public enum ClockPrecision
     /// <summary>
     ///     The clock uses the
     ///     <see href="https://learn.microsoft.com/en-us/windows/win32/api/profileapi/nf-profileapi-queryperformancecounter">
-    ///         Query
-    ///         Performance Counter
+    ///         Query Performance Counter
     ///     </see>
     ///     for fast, high-precision measurement. Usually accurate to less than 100 machine
     ///     cycles.

@@ -1,6 +1,7 @@
 ﻿// Licensed under the Apache License, Version 2.0 (the "License").
 // See the LICENSE file in the project root for more information.
 
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 
@@ -18,6 +19,7 @@ public partial class Scheduler
         private readonly ISchedule _schedule;
         private readonly Scheduler _scheduler;
         private Task? _currentExecutionTask;
+        private ZonedDateTime? _due;
         private int _isEnabled = 1;
 
         public JobState(IJob job, Scheduler scheduler, ISchedule schedule, ILogger? logger)
@@ -26,7 +28,6 @@ public partial class Scheduler
             _scheduler = scheduler;
             _schedule = schedule;
             Logger = logger;
-            CalculateNextDue();
         }
 
         /// <inheritdoc cref="IJobState.Id" />
@@ -39,7 +40,7 @@ public partial class Scheduler
         public ISchedule? Schedule => IsManual ? null : _schedule;
 
         /// <inheritdoc cref="IJobState.Due" />
-        public ZonedDateTime? Due { get; private set; }
+        ZonedDateTime IJobState.Due => _due!.Value;
 
         /// <inheritdoc cref="IJobState.Logger" />
         public ILogger? Logger { get; }
@@ -63,24 +64,30 @@ public partial class Scheduler
                 }
 
                 CalculateNextDue();
+                _scheduler.CheckSchedule($"Job '{Name}' being enabled.");
             }
         }
+
+        /// <inheritdoc cref="IJobState.Name" />
+        public string Name => _job.Name;
+
+        /// <inheritdoc cref="IScheduledJob.Due" />
+        public ZonedDateTime? Due => _due;
 
         /// <inheritdoc cref="IScheduledJob.Schedule" />
         ISchedule IScheduledJob.Schedule => _schedule;
 
         /// <inheritdoc />
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         Task IScheduledJob.ExecuteAsync(CancellationToken cancellationToken)
             => DoExecuteAsync(true, cancellationToken);
 
-        /// <inheritdoc />
-        public string Name => _job.Name;
-
         /// <summary>
-        ///     Execute the job asynchronously, as part of running hte schedule.
+        ///     Execute the job asynchronously, as part of running the schedule.
         /// </summary>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public Task ExecuteAsync(CancellationToken cancellationToken = default)
             => DoExecuteAsync(false, cancellationToken);
 
@@ -100,28 +107,61 @@ public partial class Scheduler
                 return current;
             }
 
+            // If executing manually, set the due time to now, and set IsManual
             if (manual)
             {
                 IsManual = true;
-                Due = Scheduler.GetCurrentZonedDateTime();
+                _due = Scheduler.GetCurrentZonedDateTime();
             }
 
             // Add continuation to cleanup.
             task.ContinueWith(t =>
                 {
+                    IsManual = false;
                     if (t.IsFaulted)
                     {
-                        Logger?.LogError(t.Exception, "The '{JobName}' job, threw an exception.", Name);
+                        var l = Logger;
+                        if (l is not null && l.IsEnabled(LogLevel.Error))
+                        {
+                            var exceptions = t.Exception?.InnerExceptions;
+                            if (exceptions is not null)
+                            {
+                                foreach (var exception in exceptions)
+                                {
+                                    Logger?.LogError(exception, "The '{JobName}' job, threw an exception.", Name);
+                                }
+                            }
+                            else
+                            {
+                                Logger?.LogError("The '{JobName}' job, threw an exception.", Name);
+                            }
+                        }
+
+                        if (!_schedule.Options.HasFlag(ScheduleOptions.IgnoreErrors))
+                        {
+                            // Disable the job as failed.
+                            IsEnabled = false;
+                        }
                     }
 
-                    IsManual = false;
+                    // Mark job as no longer executing, need to do this before re-calculating schedules.
+                    Interlocked.CompareExchange(ref _currentExecutionTask, null, task);
+
                     // Calculate next due.
                     CalculateNextDue();
-                    Interlocked.CompareExchange(ref _currentExecutionTask, null, task);
+
+                    Logger?.LogDebug("Finished '{JobName}' job at {Now}, next due {Due}", Name,
+                        Scheduler.GetCurrentZonedDateTime(),
+                        _due);
+
+                    // Re-check schedule
+                    _scheduler.CheckSchedule($"Job '{Name}' being completed.");
                 },
                 // We always want the continuation to run.
                 CancellationToken.None);
 
+            Logger?.LogDebug("Starting '{JobName}' job at {Now}, due {Due}", Name, Scheduler.GetCurrentZonedDateTime(),
+                _due);
             task.Start();
             return task;
         }
@@ -129,7 +169,7 @@ public partial class Scheduler
         /// <summary>
         ///     Calculate the next due <see cref="ZonedDateTime" />.
         /// </summary>
-        private void CalculateNextDue()
+        public void CalculateNextDue()
         {
             var schedule = _schedule;
             var scheduleOptions = schedule.Options;
@@ -137,33 +177,30 @@ public partial class Scheduler
             {
                 if (!IsEnabled)
                 {
-                    if (Due is null)
+                    if (_due is null)
                     {
                         return;
                     }
 
-                    Due = null;
+                    _due = null;
                 }
                 else
                 {
                     var due = schedule
                         .Next(Scheduler,
-                            Due is not null && scheduleOptions.HasFlag(ScheduleOptions.FromDue)
-                                ? Due.Value
+                            _due is not null && scheduleOptions.HasFlag(ScheduleOptions.FromDue)
+                                ? _due.Value
                                 : Scheduler.GetCurrentZonedDateTime())
                         .ApplyOptions(scheduleOptions);
 
-                    if (Due == due)
+                    if (_due == due)
                     {
                         return;
                     }
 
-                    Due = due;
+                    _due = due;
                 }
             }
-
-            // Check the schedule as our Due date has changed.
-            _scheduler.CheckSchedule();
         }
     }
 }

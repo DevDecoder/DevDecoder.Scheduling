@@ -17,7 +17,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>Scheduling, .NET, Cross-platform, Scheduler, CRON, NodaTime</PackageTags>
+    <PackageTags>Scheduling, .NET, Cross-platform, Scheduler, CRON, NodaTime, Dependency Injection</PackageTags>
     <PackageIcon>DevDecoder Icon.png</PackageIcon>
     <PackageReleaseNotes>Stable release.</PackageReleaseNotes>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -47,5 +47,5 @@
       <PackagePath>\</PackagePath>
     </None>
   </ItemGroup>
-  
+
 </Project>
