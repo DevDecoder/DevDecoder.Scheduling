@@ -10,19 +10,18 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
       with:
         fetch-depth: 0 # Avoid shallow clone so NBGV can do its work.
         submodules: 'recursive'
     - name: Set version
-      uses: dotnet/nbgv@v0.4.0
+      uses: dotnet/nbgv@master
       with:
         setAllVars: true
     - name: Setup .NET
-      uses: actions/setup-dotnet@v1
+      uses: actions/setup-dotnet@v3
       with:
         dotnet-version: '6.0.x'
-        include-prerelease: true
     - name: Install dependencies
       run: dotnet restore
     - name: Build
@@ -30,7 +29,7 @@ jobs:
     - name: Test
       run: dotnet test --configuration Release --no-build --verbosity normal -p:ContinuousIntegrationBuild=true -p:DeterministicSourcePaths=true 
     - name: Publish
-      uses: alirezanet/publish-nuget@v3.0.0
+      uses: alirezanet/publish-nuget@v3.0.4
       with:
         PROJECT_FILE_PATH: DevDecoder.Scheduling/DevDecoder.Scheduling.csproj
         NUGET_KEY: ${{secrets.NUGET_API_KEY}}
