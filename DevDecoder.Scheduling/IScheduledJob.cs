@@ -21,9 +21,10 @@ public interface IScheduledJob
     string Name { get; }
 
     /// <summary>
-    ///     The <see cref="IScheduler">scheduler</see> executing this job.
+    ///     The <see cref="IScheduler">scheduler</see> executing this job; <c>null</c> if no longer attached to an
+    ///     <see cref="IScheduler" />.
     /// </summary>
-    IScheduler Scheduler { get; }
+    IScheduler? Scheduler { get; }
 
     /// <summary>
     ///     The <see cref="ISchedule">schedule</see> that triggered this execution.

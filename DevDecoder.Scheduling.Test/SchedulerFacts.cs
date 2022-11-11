@@ -8,9 +8,9 @@ using Xunit.Abstractions;
 
 namespace DevDecoder.Scheduling.Test;
 
-public class FullFacts : TestBase
+public class SchedulerFacts : TestBase
 {
-    public FullFacts(ITestOutputHelper output) : base(output) { }
+    public SchedulerFacts(ITestOutputHelper output) : base(output) { }
 
     [Fact]
     public async Task LimitScheduleAccuratelyLimitsExecutionCount()
@@ -27,7 +27,7 @@ public class FullFacts : TestBase
             }
         }
 
-        var scheduler = GetScheduler();
+        using var scheduler = GetScheduler();
         scheduler.Add(TestJob, new LimitSchedule(3, new GapSchedule(Duration.FromMilliseconds(5))));
         await tcs.Task.WaitAsync(TimeSpan.FromSeconds(1));
         Assert.Equal(3, counter);
@@ -46,7 +46,7 @@ public class FullFacts : TestBase
             throw new InvalidOperationException();
         }
 
-        var scheduler = GetScheduler();
+        using var scheduler = GetScheduler();
         var job = scheduler.Add(FailJob, new LimitSchedule(2, new GapSchedule(Duration.FromMilliseconds(5))));
         Assert.NotNull(job);
         Assert.True(job.IsEnabled);
@@ -77,7 +77,7 @@ public class FullFacts : TestBase
             throw new InvalidOperationException();
         }
 
-        var scheduler = GetScheduler();
+        using var scheduler = GetScheduler();
         var job = scheduler.Add(FailJob,
             new LimitSchedule(2, new GapSchedule(Duration.FromMilliseconds(5), ScheduleOptions.IgnoreErrors)));
         Assert.NotNull(job);
@@ -86,6 +86,64 @@ public class FullFacts : TestBase
 
         Assert.Equal(2, counter);
         Assert.True(job.IsEnabled, "Job should not be disabled on error.");
+    }
+
+    [Fact]
+    public async Task JobStateValid()
+    {
+        var tcs = new TaskCompletionSource();
+
+        void TestJob(IJobState state)
+        {
+            Assert.True(state.IsEnabled);
+            Assert.True(state.IsExecuting);
+            Assert.False(state.IsManual);
+            tcs.TrySetResult();
+        }
+
+        // Use test-clock that will advance by one second each call.
+        using var scheduler = GetScheduler();
+
+        var job = scheduler.Add(TestJob, new OneOffSchedule(scheduler.GetCurrentZonedDateTime().PlusMilliseconds(10)));
+
+        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.True(job.IsEnabled);
+
+        // Yield to allow job continuation to set 'IsExecuting' back to false.
+        await Task.Yield();
+        Assert.False(job.IsExecuting);
+    }
+
+    [Fact]
+    public async Task JobStateNotesManualExecution()
+    {
+        var counter = 0;
+
+        async Task TestJob(IJobState state, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref counter);
+            Assert.True(state.IsEnabled);
+            Assert.True(state.IsExecuting);
+            Assert.True(state.IsManual);
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            Assert.True(cancellationToken.IsCancellationRequested);
+        }
+
+        // Use test-clock that will advance by one second each call.
+        using var scheduler = GetScheduler();
+
+        var cts = new CancellationTokenSource(10);
+
+        // Never run automatically
+        var job = scheduler.AddAsync(TestJob, OneOffSchedule.Never);
+
+        // Running job twice should de-bounce.
+        await Task.WhenAll(job.ExecuteAsync(cts.Token), job.ExecuteAsync(cts.Token));
+
+        // Should only have run once.
+        Assert.Equal(1, counter);
+        Assert.True(job.IsEnabled);
+        Assert.False(job.IsExecuting);
     }
 
     [Fact]
@@ -106,7 +164,7 @@ public class FullFacts : TestBase
         }
 
         // Use test-clock that will advance by one second each call.
-        var scheduler = GetScheduler(TestClock.From(now));
+        using var scheduler = GetScheduler(TestClock.From(now));
         scheduler.DateTimeZone = DateTimeZone.Utc;
 
         var job = scheduler.Add(TestJob,
@@ -119,6 +177,31 @@ public class FullFacts : TestBase
         // Check due time was aligned
         Assert.Equal(0, due.Value.TickOfSecond);
         Assert.Equal(nowZdt.PlusMilliseconds(500), due);
+    }
+
+    [Fact]
+    public async Task LongScheduleSupport()
+    {
+        // Create test times
+        var now = Instant.FromUtc(2023, 1, 1, 0, 0, 0).Plus(Duration.FromMilliseconds(500));
+        var nowZdt = now.InUtc();
+
+        void TestJob(IJobState state)
+        {
+        }
+
+        // Use test-clock that will advance by one second each call.
+        using var scheduler = GetScheduler(TestClock.From(now, Duration.FromDays(1)));
+        scheduler.DateTimeZone = DateTimeZone.Utc;
+
+        // Create schedule with delay of 100 days, which is much more than allowed timer delay.
+        var job = scheduler.Add(TestJob,
+            new OneOffSchedule(nowZdt.PlusHours(2400)));
+        Assert.Equal(nowZdt.PlusHours(2400), job.Due);
+
+        await Task.Delay(10);
+
+        Assert.True(job.IsEnabled);
     }
 
     [Fact]
@@ -138,7 +221,7 @@ public class FullFacts : TestBase
 
         // Test clock that we can control using the 'now' variable.
         // ReSharper disable once AccessToModifiedClosure
-        var scheduler = GetScheduler(new TestClock(_ => now));
+        using var scheduler = GetScheduler(new TestClock(_ => now));
 
         // Create job to run every second.
         var job = scheduler.Add(TestJob, new GapSchedule(Duration.FromSeconds(1)));
@@ -178,7 +261,7 @@ public class FullFacts : TestBase
 
         // Test clock that we can control using the 'now' variable.
         // ReSharper disable once AccessToModifiedClosure
-        var scheduler = GetScheduler(new TestClock(_ => now));
+        using var scheduler = GetScheduler(new TestClock(_ => now));
 
         // Create job to run every second.
         var job = scheduler.Add(TestJob, new GapSchedule(Duration.FromSeconds(1)));
@@ -199,5 +282,38 @@ public class FullFacts : TestBase
         await tcs.Task.WaitAsync(TimeSpan.FromSeconds(1.5));
 
         Assert.Equal(1, counter);
+    }
+
+    [Fact]
+    public void TryRemoveDisablesAndDetachesScheduler()
+    {
+        using var scheduler = GetScheduler();
+        var job = scheduler.Add(() => { } /* Do Nothing */, new GapSchedule(Duration.FromMilliseconds(100)));
+        Assert.True(job.IsEnabled);
+        Assert.Equal(scheduler, job.Scheduler);
+        Assert.NotNull(job.Due);
+
+        Assert.True(scheduler.TryRemove(job));
+        Assert.False(job.IsEnabled);
+        Assert.Null(job.Scheduler);
+        Assert.Null(job.Due);
+
+        // Even setting to enabled doesn't 'stick'.
+        job.IsEnabled = true;
+        Assert.False(job.IsEnabled);
+    }
+
+    [Fact]
+    public async Task DoubleDisposeOk()
+    {
+        using var scheduler = GetScheduler();
+
+        // Create rapid action to keep spinning.
+        scheduler.Add(() => { } /* Do Nothing */, new GapSchedule(Duration.FromMilliseconds(1)));
+
+        await Task.Delay(TimeSpan.FromSeconds(0.1));
+
+        // Let's dispose twice.
+        scheduler.Dispose();
     }
 }

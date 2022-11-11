@@ -32,6 +32,8 @@ var job = scheduler.Add(state => Console.WriteLine($"Execution {++counter}, due:
     new LimitSchedule(3, new GapSchedule(Duration.FromSeconds(5))));
 
 // We can use the returned job, to execute manually or disable the job temporarily, etc..
+job.IsEnabled = false;
+Assert.False(job.IsExecuting);
 ```
 
 ## IScheduler
@@ -90,7 +92,7 @@ The schedule uses `NodaTime` to ensure it handles timezones accurately.  To that
 The `Scheduler` constructor accepts an [`ILogger<Scheduler>`](https://docs.microsoft.com/en-us/dotnet/api/microsoft.extensions.logging.ilogger-1?view=dotnet-plat-ext-3.1&viewFallbackFrom=netstandard-2.1) for logging, this is normally injected via dependency injection, but here is an example of a [simple console logger](https://github.com/DevDecoder/HIDDevices/blob/master/HIDDevices.Sample/SimpleConsoleLogger.cs).
 
 ### Maximum Execution duration
-The `MaximumExecutionDuration` can also be specified during creation, or via the `IScheduler` interface.  This defaults to `Duration.MaxValue`, but it is recommended you set this to a lower value before executing any jobs on the scheduler.  It will set any job, that doesn't have the `ScheduleOptions.LongRunning` flag set, to cancel after the duration has elapsed.
+The `MaximumExecutionDuration` can also be specified during creation, or via the `IScheduler` interface.  This defaults to `Scheduler.DefaultMaximumDuration` (which is 10 mins), but you can set this to any duration (including `Duration.MaxValue`) at any time (including during construction).  It will set any job, that doesn't have the `ScheduleOptions.LongRunning` flag set, to cancel after the duration has elapsed.  As such, if you do have a job that might take longer, you must set the `ScheduleOptions.LongRunning` flag on the schedule.
 
 ## ISchedule
 The scheduler runs jobs on a schedule.  These can be as complex as your imagination allows, so long as they implement `ISchedule`, in particular:
@@ -182,7 +184,7 @@ public interface IJob
 }
 ```
 
-However, there is also a convenient `SimpleJob` class that allows the creation of any job from an action or function, using one of the `SimpleJob.Create` or `SimpleJob.CreateAsync` overloads.  Most conveniently though, there are numerouse extension methods on `IScheduler` that overload the `Add` method to create a `SimpleJob` automatically, e.g.:
+However, there is also a convenient `SimpleJob` class that allows the creation of any job from an action or function, using one of the `SimpleJob.Create` or `SimpleJob.CreateAsync` overloads.  Most conveniently though, there are numerouse extension methods on `IScheduler` that overload the `Add` and `AddAsync` methods to create a `SimpleJob` automatically, e.g.:
 
 ```csharp
 // Run a simple function in 10s, logging it's result on completion.
@@ -259,17 +261,18 @@ public interface IJobState
 ### IScheduledJob
 Similarly, when a job is added to the `IScheduler` it returns an `IScheduledJob`. This is almost identical to `IJobState`, also allowing control over whether the job is enabled, but also allowing for manual execution of the job.
 
-**Note:** A job will never be executed _concurrently_ with itself.  If a job is executed manually, whilst it is also executing as part of a schedule, the manual execution will receive the same task, and vice-versa.  It is effectively 'debounced', meaning that a job execution is inherently thread-safe.
+**_Note:_** A job will never be executed _concurrently_ with itself.  If a job is executed manually, whilst it is also executing as part of a schedule, the manual execution will receive the same task, and vice-versa.  It is effectively 'debounced', meaning that a job execution is inherently thread-safe.
+
+## Job Removal
+As well as disabling a job using `IScheduledJob.IsEnabled`, you can permanently remove it from the scheduler using `IScheduler.TryRemove`. A removed job can still be executed manually, but it's `Scheduler` and `Due` properties will always be `null` and `IsEnabled` will always be `false`.  You cannot re-add a removed job, you must re-create a job using the `Add` or `AddAsync` methods. As such, if you want to temporarily 'remove' a job, use the `IsEnabled` property instead.
 
 # TODO
 
-* More documentation, and examples.
-* Serialization of state for.
-* More tests.
+* Explicit schedule serialization support.
 
 ## Testing status
 
-* There are some basic unit tests in the `DevDecoder.Scheduling.Test` project.
+* Unit tests can be found in the `DevDecoder.Scheduling.Test` project.
 
 # Acknowledgements
 

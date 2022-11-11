@@ -9,9 +9,9 @@ using Xunit.Abstractions;
 
 namespace DevDecoder.Scheduling.Test;
 
-public class TestBase
+public abstract class TestBase
 {
-    public TestBase(ITestOutputHelper output) => Output = output;
+    protected TestBase(ITestOutputHelper output) => Output = output;
 
     protected ITestOutputHelper Output { get; }
 

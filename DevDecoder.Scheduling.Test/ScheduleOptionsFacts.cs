@@ -2,11 +2,17 @@
 // See the LICENSE file in the project root for more information.
 
 using DevDecoder.Scheduling.Schedules;
+using NodaTime;
+using Xunit.Abstractions;
 
 namespace DevDecoder.Scheduling.Test;
 
-public class ScheduleOptionsFacts
+public class ScheduleOptionsFacts : TestBase
 {
+    public ScheduleOptionsFacts(ITestOutputHelper output) : base(output)
+    {
+    }
+
     [Theory]
     // No rounding
     [InlineData(ScheduleOptions.None, "1", "2017-10-01 01:45:01.0000001 Z", "2017-10-01 01:45:02.0000001 Z")]
@@ -42,5 +48,64 @@ public class ScheduleOptionsFacts
         Assert.Equal(d, schedule.Duration);
         Assert.Equal(options, schedule.Options);
         Assert.Equal("d", schedule.Name);
+    }
+
+    [Fact]
+    public async Task MaximumDurationRespected()
+    {
+        var counter = 0;
+        var tcs = new TaskCompletionSource();
+
+        async Task TestJob(IJobState state, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref counter);
+
+            // Wait longer than max duration.
+            await Task.Delay(100, cancellationToken);
+
+            Assert.True(cancellationToken.IsCancellationRequested);
+            tcs.TrySetResult();
+        }
+
+        // Set short maximum duration.
+        using var scheduler = GetScheduler(maximumExecutionDuration: Duration.FromMilliseconds(50));
+
+        // Create job to run every second.
+        scheduler.AddAsync(TestJob,
+            new OneOffSchedule(scheduler.GetCurrentZonedDateTime().PlusMilliseconds(10)));
+
+        await Task.Delay(100);
+
+        Assert.Equal(1, counter);
+        Assert.False(tcs.Task.IsCompleted);
+    }
+
+    [Fact]
+    public async Task LongRunningRespected()
+    {
+        var counter = 0;
+        var tcs = new TaskCompletionSource();
+
+        async Task TestJob(IJobState state, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref counter);
+
+            // Wait longer than max duration.
+            await Task.Delay(100, cancellationToken);
+
+            Assert.False(cancellationToken.IsCancellationRequested);
+            tcs.TrySetResult();
+        }
+
+        // Set short maximum duration.
+        using var scheduler = GetScheduler(maximumExecutionDuration: Duration.FromMilliseconds(50));
+
+        // Create job to run every second.
+        scheduler.AddAsync(TestJob,
+            new OneOffSchedule(scheduler.GetCurrentZonedDateTime().PlusMilliseconds(10), ScheduleOptions.LongRunning));
+
+        await tcs.Task;
+
+        Assert.Equal(1, counter);
     }
 }

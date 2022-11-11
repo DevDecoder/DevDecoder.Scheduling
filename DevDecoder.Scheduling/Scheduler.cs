@@ -8,17 +8,23 @@ using NodaTime;
 
 namespace DevDecoder.Scheduling;
 
-public partial class Scheduler : IScheduler, IDisposable
+public partial class Scheduler : IScheduler
 {
+    /// <summary>
+    ///     The default maximum duration is set to 10 minutes. If you have jobs that take longer make sure you set the
+    ///     <see cref="ScheduleOptions.LongRunning" /> flag.
+    /// </summary>
+    public static readonly Duration DefaultMaximumDuration = Duration.FromMinutes(10);
+
     /// <summary>
     ///     The minimum time the timer will wait for, otherwise uses a <see cref="SpinWait" />.
     /// </summary>
     private static readonly Duration s_minimumTimerWait = Duration.FromMilliseconds(1);
 
     /// <summary>
-    ///     The maximum time span supported by a timer (in milliseconds) ~49 days!
+    ///     The maximum time span between checks (must be less than ~24 days, or Int.MaxValue milliseconds).
     /// </summary>
-    private static readonly Duration s_maximumTimerWait = Duration.FromMilliseconds(0xfffffffe);
+    private static readonly Duration s_maximumTimerWait = Duration.FromDays(1);
 
     /// <summary>
     ///     The logger.
@@ -97,8 +103,13 @@ public partial class Scheduler : IScheduler, IDisposable
         DateTimeZone = DateTimeZoneProvider.GetSystemDefault();
         _logger = logger;
         _ticker = new Timer(TimerTick, null, Timeout.Infinite, Timeout.Infinite);
-        MaximumExecutionDuration = maximumExecutionDuration ?? Duration.MaxValue;
+        MaximumExecutionDuration = maximumExecutionDuration ?? DefaultMaximumDuration;
     }
+
+    /// <summary>
+    ///     Gets a value indicating when the next job is due to execute.
+    /// </summary>
+    public Instant NextDue { get; private set; }
 
     /// <summary>
     ///     Gets or sets a value indicating whether this <see cref="Scheduler" /> is enabled.
@@ -125,11 +136,6 @@ public partial class Scheduler : IScheduler, IDisposable
         }
     }
 
-    /// <summary>
-    ///     Gets a value indicating when the next job is due to execute.
-    /// </summary>
-    public Instant NextDue { get; private set; }
-
     /// <inheritdoc />
     public void Dispose()
     {
@@ -137,6 +143,7 @@ public partial class Scheduler : IScheduler, IDisposable
         Interlocked.Exchange(ref _ticker, null)?.Dispose();
         if (Interlocked.Exchange(ref _masterCancellationTokenSource, null) is not { } cts)
         {
+            _logger?.LogInformation("The scheduler was already disposed.");
             return;
         }
 
@@ -177,10 +184,19 @@ public partial class Scheduler : IScheduler, IDisposable
 
     /// <inheritdoc />
     public bool TryRemove(IScheduledJob job)
-        => _scheduledJobs.TryRemove(job.Id, out _);
+    {
+        var result = _scheduledJobs.TryRemove(job.Id, out _);
+        if (result && job is JobState j)
+        {
+            // Null the next due date.
+            j.CalculateNextDue(true);
+        }
+
+        return result;
+    }
 
     /// <summary>
-    /// Called whenever the timer ticks.
+    ///     Called whenever the timer ticks.
     /// </summary>
     /// <param name="_"></param>
     private void TimerTick(object? _) => CheckSchedule("By timer tick");

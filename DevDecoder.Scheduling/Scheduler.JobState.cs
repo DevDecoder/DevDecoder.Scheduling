@@ -71,6 +71,16 @@ public partial class Scheduler
         /// <inheritdoc cref="IJobState.Name" />
         public string Name => _job.Name;
 
+        /// <inheritdoc cref="IScheduledJob.Scheduler" />
+        IScheduler? IScheduledJob.Scheduler => _scheduler._scheduledJobs.ContainsKey(Id) ? _scheduler : null;
+
+        /// <inheritdoc cref="IScheduledJob.IsEnabled" />
+        bool IScheduledJob.IsEnabled
+        {
+            get => IsEnabled && _scheduler._scheduledJobs.ContainsKey(Id);
+            set => IsEnabled = value;
+        }
+
         /// <inheritdoc cref="IScheduledJob.Due" />
         public ZonedDateTime? Due => _scheduler.IsEnabled ? _due : null;
 
@@ -91,10 +101,17 @@ public partial class Scheduler
         public Task ExecuteAsync(CancellationToken cancellationToken = default)
             => DoExecuteAsync(false, cancellationToken);
 
+        /// <summary>
+        ///     Actually executes the job, either manually or as part of a schedule.
+        /// </summary>
+        /// <param name="manual"><c>True</c> if executing manually; otherwise <c>false</c>.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns>An awaitable task.</returns>
         private Task DoExecuteAsync(bool manual, CancellationToken cancellationToken = default)
         {
             if (!manual && _isEnabled < 1)
             {
+                Logger?.LogDebug("Not starting '{JobName}' as disabled.", Name);
                 return Task.CompletedTask;
             }
 
@@ -103,8 +120,22 @@ public partial class Scheduler
             var current = Interlocked.CompareExchange(ref _currentExecutionTask, task, null);
             if (current != null)
             {
-                task.Dispose();
-                return current;
+                // We had a current task, so we return that.
+                Logger?.LogDebug(
+                    manual
+                        ? "Executing '{JobName}' - binding to existing execution."
+                        : "Starting '{JobName}' - binding to existing execution", Name);
+
+                if (current.IsCompleted || !cancellationToken.CanBeCanceled)
+                {
+                    // No need to bind supplied cancellation token.
+                    return current;
+                }
+
+                // Although we bind to existing execution we respect the new cancellation token.
+                return cancellationToken.IsCancellationRequested
+                    ? Task.FromCanceled(cancellationToken)
+                    : WithCancellation(current, cancellationToken);
             }
 
             // If executing manually, set the due time to now, and set IsManual
@@ -123,6 +154,7 @@ public partial class Scheduler
                         var l = Logger;
                         if (l is not null && l.IsEnabled(LogLevel.Error))
                         {
+                            // Unwrap exceptions for logging.
                             var exceptions = t.Exception?.InnerExceptions;
                             if (exceptions is not null)
                             {
@@ -152,18 +184,52 @@ public partial class Scheduler
 
                     Logger?.LogDebug("Finished '{JobName}' job at {Now}, next due {Due}", Name,
                         Scheduler.GetCurrentZonedDateTime(),
-                        _due);
+                        _due?.ToString() ?? "never");
 
-                    // Re-check schedule
-                    _scheduler.CheckSchedule($"Job '{Name}' being completed.");
+                    // Re-check schedule if new due date.
+                    if (_due is not null)
+                    {
+                        _scheduler.CheckSchedule($"Job '{Name}' being completed.");
+                    }
                 },
                 // We always want the continuation to run.
                 CancellationToken.None);
 
-            Logger?.LogDebug("Starting '{JobName}' job at {Now}, due {Due}", Name, Scheduler.GetCurrentZonedDateTime(),
-                _due);
+            if (manual)
+            {
+                Logger?.LogDebug("Executing '{JobName}' job at {Now}", Name,
+                    Scheduler.GetCurrentZonedDateTime());
+            }
+            else
+            {
+                Logger?.LogDebug("Starting '{JobName}' job at {Now}, due {Due}", Name,
+                    Scheduler.GetCurrentZonedDateTime(),
+                    _due);
+            }
+
             task.Start();
             return task;
+        }
+
+        /// <summary>
+        ///     Adds cancellation support to a task that is otherwise not cancelable.
+        /// </summary>
+        /// <param name="task">The task.</param>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns></returns>
+        /// <exception cref="TaskCanceledException"></exception>
+        private static async Task WithCancellation(Task task, CancellationToken cancellationToken)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            await using (cancellationToken.Register(s => ((TaskCompletionSource<bool>)s).TrySetResult(true), tcs))
+            {
+                if (task != await Task.WhenAny(task, tcs.Task).ConfigureAwait(false))
+                {
+                    throw new TaskCanceledException(task);
+                }
+            }
+
+            await task.ConfigureAwait(false);
         }
 
         /// <summary>
@@ -175,7 +241,7 @@ public partial class Scheduler
             var scheduleOptions = schedule.Options;
             lock (_lock)
             {
-                if (!IsEnabled)
+                if (!((IScheduledJob)this).IsEnabled)
                 {
                     if (_due is null)
                     {

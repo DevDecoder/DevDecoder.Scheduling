@@ -8,7 +8,7 @@ namespace DevDecoder.Scheduling;
 /// <summary>
 ///     Interface for a scheduler that can run <see cref="IJob">jobs</see> on a <see cref="ISchedule">schedule</see>.
 /// </summary>
-public interface IScheduler
+public interface IScheduler : IDisposable
 {
     /// <summary>
     ///     The clock used by the scheduler.
@@ -31,14 +31,14 @@ public interface IScheduler
     Duration MaximumExecutionDuration { get; set; }
 
     /// <summary>
-    ///     Get's the current <see cref="ZonedDateTime" />.
-    /// </summary>
-    ZonedDateTime GetCurrentZonedDateTime() => Clock.GetCurrentInstant().InZone(DateTimeZone);
-
-    /// <summary>
     ///     If <c>true</c> then the scheduler is allowed to execute jobs; otherwise <c>false</c>, prevents further executions.
     /// </summary>
     bool IsEnabled { get; set; }
+
+    /// <summary>
+    ///     Get's the current <see cref="ZonedDateTime" />.
+    /// </summary>
+    ZonedDateTime GetCurrentZonedDateTime() => Clock.GetCurrentInstant().InZone(DateTimeZone);
 
     /// <summary>
     ///     Tries to remove the specified <see cref="IScheduledJob">scheduled job</see>
