@@ -110,7 +110,7 @@ public class SchedulerFacts : TestBase
         Assert.True(job.IsEnabled);
 
         // Yield to allow job continuation to set 'IsExecuting' back to false.
-        await Task.Yield();
+        await Task.Delay(10);
         Assert.False(job.IsExecuting);
     }
 
