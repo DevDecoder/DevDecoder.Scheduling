@@ -29,7 +29,7 @@
     <RootNamespace>DevDecoder.Scheduling</RootNamespace>
     <PackageReadmeFile>readme.md</PackageReadmeFile>
     <Configurations>Debug;Release</Configurations>
-    <AssemblyOriginatorKeyFile>D:\Source\DevDecoder.Scheduling\DevDecoder.Scheduling.snk</AssemblyOriginatorKeyFile>
+    <AssemblyOriginatorKeyFile>..\DevDecoder.Scheduling.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <ItemGroup>
