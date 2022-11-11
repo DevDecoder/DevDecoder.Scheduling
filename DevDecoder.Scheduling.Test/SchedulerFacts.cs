@@ -140,6 +140,9 @@ public class SchedulerFacts : TestBase
         // Running job twice should de-bounce.
         await Task.WhenAll(job.ExecuteAsync(cts.Token), job.ExecuteAsync(cts.Token));
 
+        // Yield to allow job continuations to complete.
+        await Task.Delay(10);
+
         // Should only have run once.
         Assert.Equal(1, counter);
         Assert.True(job.IsEnabled);
